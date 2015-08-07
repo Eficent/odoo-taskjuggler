@@ -68,7 +68,7 @@ project {{ project.id }} "{{ project.name }}" {{ project.interval2 }} {
         {{timeintervals}}
         """,
 
-        tjp_depend_template="""{{depend.task.absolute_id}}
+        tjp_depend_template="""!{{depend.task.absolute_id}}
         { {%if depend.gapduration %}{{depend.gapduration}}{%endif %}
         {%if depend.gaplength %}{{depend.gaplength}}{%endif %}
         {%if depend.onend %}onend{%endif %}

@@ -20,5 +20,10 @@
             </field>
         </record>
 
+        <menuitem action="resource.action_resource_resource_tree"
+                  id="menu_view_resource_tree"
+                  parent="resource.menu_resource_config"
+                  sequence="2"/>
+
     </data>
 </openerp>

@@ -86,10 +86,16 @@ class project(orm.Model):
         # Read the project data
         project = self.pool.get('project.project').browse(cr, uid, proj_id,
                                                           context=context)
-        date_start = datetime.datetime.strptime(
-            project.date_start, "%Y-%m-%d").date()
-        date_end = datetime.datetime.strptime(
-            project.date, "%Y-%m-%d").date()
+        if project.date_start:
+            date_start = datetime.datetime.strptime(
+                project.date_start, "%Y-%m-%d").date()
+        else:
+            date_start = datetime.date.today()
+        if project.date:
+            date_end = datetime.datetime.strptime(
+                project.date, "%Y-%m-%d").date()
+        else:
+            date_end = datetime.date.today()
         tjproject = TjProject(project.id, project.complete_name, '')
         tjproject.interval2 = TjInterval2(date_start, date_end)
         return tjproject
@@ -103,29 +109,34 @@ class project(orm.Model):
             minutes = int(round(hours * 60))
             return "%02d:%02d" % divmod(minutes, 60)
 
-        members = {}
+        members = []
         for project in self.browse(cr, uid, wbs_ids, context=context):
             for user in project.members:
-                for employee in user.employee_ids:
-                    members[employee.id] = user.id
-                    continue
+                members.append(user.id)
         resources = []
-        for employee in self.pool.get('hr.employee').browse(
-                cr, uid, members.keys(), context=context):
-            rid = members[employee.id]
-            rname = employee.resource_id.name
-            calendar = employee.resource_id.calendar_id
+        resource_obj = self.pool['resource.resource']
+        for user in members:
+            # Obtain the corresponding resource
+            rids = resource_obj.search(cr, uid, [('user_id', '=', user)],
+                                       context=context)
+            if not rids:
+                continue
+            res = resource_obj.browse(cr, uid, rids[0], context=context)
+            rid = res.id
+            rname = res.name
+            calendar = res.calendar_id
             workinghours_list = []
-            for attendance in calendar.attendance_ids:
-                weekday = _WEEKDAYS[attendance.dayofweek]
-                weekdayinterval = TjWeekDayInterval(weekday, '')
-                timeinterval = TjTimeInterval(
-                    hours_time_string(attendance.hour_from),
-                    hours_time_string(attendance.hour_to))
-                weekdayintervals = TjWeekDayIntervals([weekdayinterval])
-                timeintervals = TjTimeIntervals([timeinterval])
-                workinghours_list.append(TjWorkingHours(weekdayintervals,
-                                                        timeintervals))
+            if calendar.attendance_ids:
+                for attendance in calendar.attendance_ids:
+                    weekday = _WEEKDAYS[attendance.dayofweek]
+                    weekdayinterval = TjWeekDayInterval(weekday, '')
+                    timeinterval = TjTimeInterval(
+                        hours_time_string(attendance.hour_from),
+                        hours_time_string(attendance.hour_to))
+                    weekdayintervals = TjWeekDayIntervals([weekdayinterval])
+                    timeintervals = TjTimeIntervals([timeinterval])
+                    workinghours_list.append(TjWorkingHours(weekdayintervals,
+                                                            timeintervals))
             resource = TjResource(rid, rname)
             resource.workinghours = workinghours_list
             resources.append(resource)
@@ -133,6 +144,7 @@ class project(orm.Model):
 
     def tjp_tasks(self, cr, uid, ids, tjresources, tjwbselements,
                   context=None):
+        resource_obj = self.pool['resource.resource']
         hierarchy = {}
         tasks = {}
         for project in self.pool.get('project.project').browse(
@@ -150,8 +162,11 @@ class project(orm.Model):
             for task in project.tasks:
                 tjtask = TjTask(task.id, task.name, 'project.task')
                 tjtask.effort = TjEffort(task.planned_hours, 'h')
+                rids = resource_obj.search(
+                    cr, uid, [('user_id', '=', task.user_id.id)],
+                    context=context)
                 for tjresource in tjresources:
-                    if tjresource.internal_id == task.user_id.id:
+                    if tjresource.internal_id in rids:
                         tjtask.allocations = [tjresource]
                 tjtasks.append(tjtask)
                 tasks[tjtask] = True
@@ -186,11 +201,15 @@ class project(orm.Model):
             tjdepends = []
             for predecessor in task.predecessor_ids:
                 for dtjtask in tjtasks:
-                    if dtjtask.internal_id == predecessor.id:
+                    if (
+                        dtjtask.type == 'project.task'
+                        and dtjtask.internal_id == predecessor.id
+                    ):
                         tjdepends.append(TjDepend(dtjtask))
                         continue
             if tjdepends:
                 tjtask.depends = TjDepends(tjdepends)
+        return True
 
     def _create_tjp_file_content(self, cr, uid, proj_id, files, context=None):
         """creates the tjp file content

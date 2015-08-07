@@ -26,7 +26,7 @@
     "author": "Eficent",
     "website": "",
     "category": "Generic Modules/Projects & Services",
-    "depends": ["project"],
+    "depends": ["project", "hr", "project_time_sequence"],
     "description": """
 Taskjuggler integration
 =======================
